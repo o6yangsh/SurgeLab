@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SurgeLab for Windows</title>
+  <link rel="stylesheet" href="styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar glass-panel">
+      <div class="sidebar-header">
+        <div class="logo-circle">SL</div>
+        <h2>SurgeLab</h2>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" data-target="overview">Overview</button>
+        <button class="nav-btn" data-target="profiles">Profiles & Nodes</button>
+        <button class="nav-btn" data-target="rules">Rules Engine</button>
+        <button class="nav-btn" data-target="dns">DNS Settings</button>
+        <button class="nav-btn" data-target="diagnostics">Diagnostics</button>
+        <button class="nav-btn" data-target="export">Export</button>
+      </nav>
+      <div class="sidebar-footer">
+        <p>Local Controller: 127.0.0.1</p>
+        <div class="status-indicator">
+          <div class="dot stopped" id="status-dot"></div>
+          <span id="status-text">Stopped</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      
+      <!-- Overview View -->
+      <section id="overview" class="view active">
+        <header class="view-header">
+          <h1>Overview</h1>
+          <p>Control sing-box engine and monitor traffic</p>
+        </header>
+        <div class="card glass-panel engine-control">
+          <div class="engine-info">
+            <h3>Engine Status</h3>
+            <p id="engine-status-detail">Not running. Select a mode and start.</p>
+          </div>
+          <div class="engine-actions">
+            <select id="mode-select" class="premium-select">
+              <option value="system">System Proxy Mode</option>
+              <option value="tun">TUN Mode (Local Only)</option>
+            </select>
+            <button id="btn-start" class="btn btn-primary">Start Engine</button>
+            <button id="btn-stop" class="btn btn-danger" disabled>Stop Engine</button>
+          </div>
+        </div>
+
+        <div class="card glass-panel">
+          <h3>Recent Logs</h3>
+          <div id="log-console" class="log-console">
+            <div>[System] SurgeLab Ready.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Profiles View -->
+      <section id="profiles" class="view hidden">
+        <header class="view-header">
+          <h1>Profiles & Nodes</h1>
+          <p>Import and manage your proxy nodes</p>
+        </header>
+        <div class="card glass-panel">
+          <h3>Quick Import URI</h3>
+          <div class="import-row">
+            <input type="text" id="uri-input" class="premium-input" placeholder="ss://, trojan://, vmess://, vless://, hy2://">
+            <button id="btn-import" class="btn btn-primary">Import</button>
+          </div>
+        </div>
+        <div class="node-list" id="node-list">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- Rules View -->
+      <section id="rules" class="view hidden">
+        <header class="view-header">
+          <h1>Rules Engine</h1>
+          <p>Configure routing and preview rule matches</p>
+        </header>
+        <div class="card glass-panel">
+          <h3>Rule Preview Tool</h3>
+          <div class="import-row">
+            <input type="text" id="preview-input" class="premium-input" placeholder="e.g., google.com or 8.8.8.8">
+            <button id="btn-preview" class="btn btn-secondary">Test Match</button>
+          </div>
+          <p id="preview-result" class="preview-result"></p>
+        </div>
+        <div class="card glass-panel">
+          <h3>Rule Groups</h3>
+          <div class="rule-groups">
+            <span class="badge">DIRECT</span>
+            <span class="badge">REJECT</span>
+            <span class="badge">PROXY</span>
+            <span class="badge">AI</span>
+            <span class="badge">Streaming</span>
+            <span class="badge">Final</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- DNS View -->
+      <section id="dns" class="view hidden">
+        <header class="view-header">
+          <h1>DNS Settings</h1>
+          <p>Manage local and remote DNS resolution</p>
+        </header>
+        <div class="card glass-panel form-group">
+          <label>Local DNS</label>
+          <input type="text" class="premium-input" value="223.5.5.5">
+          <label>Remote DNS (DoH/DoT)</label>
+          <input type="text" class="premium-input" value="https://cloudflare-dns.com/dns-query">
+          <label class="checkbox-label">
+            <input type="checkbox" checked>
+            Enable Fake-IP
+          </label>
+        </div>
+      </section>
+
+      <!-- Diagnostics View -->
+      <section id="diagnostics" class="view hidden">
+        <header class="view-header">
+          <h1>Diagnostics</h1>
+          <p>Test your network and configurations</p>
+        </header>
+        <div class="diagnostic-grid">
+          <div class="card glass-panel diag-card">
+            <h3>Latency Test</h3>
+            <button class="btn btn-secondary">Run Test</button>
+          </div>
+          <div class="card glass-panel diag-card">
+            <h3>DNS Resolution Test</h3>
+            <button class="btn btn-secondary">Run Test</button>
+          </div>
+          <div class="card glass-panel diag-card webrtc-warning">
+            <h3>WebRTC Leak Warning</h3>
+            <p>Ensure your browser disables WebRTC to prevent real IP leaks.</p>
+            <button class="btn btn-danger">Check Status</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Export View -->
+      <section id="export" class="view hidden">
+        <header class="view-header">
+          <h1>Export Data</h1>
+          <p>Export generated sing-box config or redacted profiles</p>
+        </header>
+        <div class="card glass-panel">
+          <button id="btn-export-config" class="btn btn-primary">Export sing-box.json</button>
+          <button id="btn-export-profile" class="btn btn-secondary">Export Redacted Profile</button>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <script src="URIParser.js"></script>
+  <script src="ProfileCompiler.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>

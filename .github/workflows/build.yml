@@ -1,0 +1,37 @@
+name: Build SurgeLab Windows EXE
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
+
+    - name: Download latest sing-box.exe
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v1.9.0/sing-box-1.9.0-windows-amd64.zip" -OutFile "sing-box.zip"
+        Expand-Archive -Path "sing-box.zip" -DestinationPath "."
+        Move-Item -Path "sing-box-1.9.0-windows-amd64\sing-box.exe" -Destination "sing-box.exe"
+      
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Build Windows EXE
+      run: npm run build:win
+
+    - name: Upload EXE Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: SurgeLab-Windows-Build
+        path: dist/*.exe

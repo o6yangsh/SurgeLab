@@ -1,0 +1,85 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "remote",
+        "address": "https://cloudflare-dns.com/dns-query",
+        "detour": "proxy"
+      },
+      {
+        "tag": "local",
+        "address": "223.5.5.5",
+        "detour": "direct"
+      }
+    ],
+    "rules": [
+      {
+        "geosite": "cn",
+        "server": "local"
+      }
+    ],
+    "strategy": "ipv4_only"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "tun0",
+      "inet4_address": "172.19.0.1/30",
+      "auto_route": true,
+      "strict_route": true,
+      "stack": "system",
+      "sniff": true,
+      "sniff_override_destination": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy",
+      "server": "us-west-vless.example.com",
+      "server_port": 443,
+      "uuid": "b831381d-2253-4d56-8255-a0c5bdc6f2a7",
+      "tls": {
+        "enabled": true,
+        "server_name": "us-west-vless.example.com",
+        "reality": {
+          "enabled": true,
+          "public_key": "MASKED_PUBLIC_KEY",
+          "short_id": "MASKED_SHORT_ID"
+        }
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    },
+    {
+      "type": "block",
+      "tag": "block"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "geosite": "category-ads-all",
+        "outbound": "block"
+      },
+      {
+        "geosite": "cn",
+        "geoip": "cn",
+        "outbound": "direct"
+      },
+      {
+        "domain_suffix": [
+          "google.com"
+        ],
+        "outbound": "proxy"
+      }
+    ]
+  }
+}

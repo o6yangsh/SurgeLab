@@ -1,0 +1,26 @@
+[
+  {
+    "type": "vless",
+    "name": "US West 1",
+    "server": "us-west-vless.example.com",
+    "port": 443,
+    "uuid": "b831381d-2253-4d56-8255-a0c5bdc6f2a7",
+    "tls": {
+      "enabled": true,
+      "server_name": "us-west-vless.example.com",
+      "reality": {
+        "enabled": true,
+        "public_key": "MASKED_PUBLIC_KEY",
+        "short_id": "MASKED_SHORT_ID"
+      }
+    }
+  },
+  {
+    "type": "hysteria2",
+    "name": "JP Tokyo 1",
+    "server": "jp-tk-hy2.example.com",
+    "port": 443,
+    "password": "MASKED_PASSWORD",
+    "sni": "jp-tk-hy2.example.com"
+  }
+]
