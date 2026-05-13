@@ -90,6 +90,13 @@ class ProfileCompiler {
                 if (n.tls && n.tls.enabled) {
                     out.tls = n.tls;
                 }
+            } else if (n.type === 'vmess') {
+                out.uuid = n.uuid;
+                out.alter_id = n.alterId || 0;
+                out.security = n.security || 'auto';
+                if (n.tls && n.tls.enabled) {
+                    out.tls = n.tls;
+                }
             } else if (n.type === 'hysteria2') {
                 out.up_mbps = 100;
                 out.down_mbps = 100;
@@ -133,7 +140,7 @@ class ProfileCompiler {
      */
     static redactProfile(nodes) {
         return nodes.map(n => {
-            const redacted = { ...n };
+            const redacted = JSON.parse(JSON.stringify(n)); // deep clone to avoid mutating original
             if (redacted.uuid) redacted.uuid = 'MASKED_UUID';
             if (redacted.password) redacted.password = 'MASKED_PASSWORD';
             if (redacted.tls && redacted.tls.reality) {

@@ -10,8 +10,8 @@ class URIParser {
         if (uri.startsWith('hy2://') || uri.startsWith('hysteria2://')) return this.parseHy2(uri);
         if (uri.startsWith('trojan://')) return this.parseTrojan(uri);
         if (uri.startsWith('ss://')) return this.parseSS(uri);
-        // Fallback for demo purposes
-        return this.parseGeneric(uri);
+        if (uri.startsWith('vmess://')) return this.parseVmess(uri);
+        throw new Error(`Unsupported URI scheme: ${uri.split('://')[0]}`);
     }
 
     static parseVless(uri) {
@@ -81,32 +81,45 @@ class URIParser {
     }
 
     static parseSS(uri) {
-        // Shadowsocks is often base64 encoded.
-        // Format: ss://base64(method:password)@server:port#name
-        // or ss://base64(method:password@server:port)#name
+        // Shadowsocks SIP002 format: ss://base64(method:password)@server:port#name
         try {
-            const url = new URL(uri);
-            let method = '', password = '';
-            let server = url.hostname;
-            let port = url.port;
+            // Extract the part after ss:// and before the hash
+            const withoutScheme = uri.slice(5); // remove 'ss://'
+            const hashIndex = withoutScheme.lastIndexOf('#');
+            const name = hashIndex !== -1 ? decodeURIComponent(withoutScheme.slice(hashIndex + 1)) : 'Shadowsocks Node';
+            const mainPart = hashIndex !== -1 ? withoutScheme.slice(0, hashIndex) : withoutScheme;
 
-            if (url.username) {
-                // Try decoding the userinfo part if it doesn't contain a colon natively
-                const decoded = Buffer.from(url.username, 'base64').toString('utf8');
-                if (decoded.includes(':')) {
-                    [method, password] = decoded.split(':');
-                } else {
-                    // Fallback if not base64 encoded
-                    method = url.username;
-                    password = url.password;
+            let method = '', password = '', server = '', port = 8388;
+            const atIndex = mainPart.lastIndexOf('@');
+
+            if (atIndex !== -1) {
+                // SIP002: base64(method:password)@server:port
+                const userinfo = mainPart.slice(0, atIndex);
+                const hostPort = mainPart.slice(atIndex + 1);
+                const decoded = atob(userinfo);
+                const colonIdx = decoded.indexOf(':');
+                method = decoded.slice(0, colonIdx);
+                password = decoded.slice(colonIdx + 1);
+                const lastColon = hostPort.lastIndexOf(':');
+                server = hostPort.slice(0, lastColon);
+                port = parseInt(hostPort.slice(lastColon + 1), 10);
+            } else {
+                // Legacy: entire payload is base64 encoded
+                const decoded = atob(mainPart);
+                const match = decoded.match(/^(.+?):(.+)@(.+):(\d+)$/);
+                if (match) {
+                    method = match[1];
+                    password = match[2];
+                    server = match[3];
+                    port = parseInt(match[4], 10);
                 }
             }
             
             return {
                 type: 'shadowsocks',
-                name: decodeURIComponent(url.hash.slice(1)) || 'Shadowsocks Node',
+                name: name,
                 server: server,
-                port: parseInt(port || '8388', 10),
+                port: port || 8388,
                 method: method || 'aes-256-gcm',
                 password: password
             };
@@ -115,14 +128,27 @@ class URIParser {
         }
     }
 
-    static parseGeneric(uri) {
-        const url = new URL(uri);
-        return {
-            type: url.protocol.replace(':', ''),
-            name: decodeURIComponent(url.hash.slice(1)) || 'Generic Node',
-            server: url.hostname,
-            port: parseInt(url.port || '443', 10)
-        };
+    static parseVmess(uri) {
+        // vmess:// uses base64 encoded JSON
+        try {
+            const encoded = uri.slice(8); // remove 'vmess://'
+            const json = JSON.parse(atob(encoded));
+            return {
+                type: 'vmess',
+                name: json.ps || 'VMess Node',
+                server: json.add,
+                port: parseInt(json.port, 10),
+                uuid: json.id,
+                alterId: parseInt(json.aid || '0', 10),
+                security: json.scy || 'auto',
+                tls: {
+                    enabled: json.tls === 'tls',
+                    server_name: json.sni || json.host || json.add
+                }
+            };
+        } catch (e) {
+            throw new Error(`Failed to parse VMess URI: ${e.message}`);
+        }
     }
 }
 

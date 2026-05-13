@@ -29,6 +29,16 @@ function addLog(msg) {
 
 if (window.electronAPI) {
   window.electronAPI.onSingboxLog((log) => addLog(log));
+  // Auto-update UI if sing-box crashes or exits unexpectedly
+  window.electronAPI.onSingboxStatus((status) => {
+    if (status === 'stopped') {
+      btnStart.disabled = false;
+      btnStop.disabled = true;
+      statusDot.className = 'dot stopped';
+      statusText.textContent = 'Stopped';
+      document.getElementById('engine-status-detail').textContent = 'Engine stopped unexpectedly.';
+    }
+  });
 }
 
 btnStart.addEventListener('click', async () => {
@@ -49,8 +59,10 @@ btnStart.addEventListener('click', async () => {
       btnStop.disabled = false;
       statusDot.className = 'dot running';
       statusText.textContent = 'Running';
+      document.getElementById('engine-status-detail').textContent = `Running in ${mode === 'tun' ? 'TUN' : 'System Proxy'} mode | PID: ${res.pid}`;
     } else {
       btnStart.disabled = false;
+      document.getElementById('engine-status-detail').textContent = res.message || 'Failed to start.';
     }
   } else {
     // Mock for browser

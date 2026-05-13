@@ -6,6 +6,24 @@ const { spawn } = require('child_process');
 let mainWindow;
 let singboxProcess = null;
 
+// Use userData for writable files (config, profiles)
+// In packaged app, __dirname is read-only (inside asar archive)
+function getDataDir() {
+  return app.getPath('userData');
+}
+
+// Find sing-box binary: check extraResources first (packaged), then project root (dev)
+function getSingboxPath() {
+  const binaryName = process.platform === 'win32' ? 'sing-box.exe' : 'sing-box';
+  // Packaged app: binary is in resources/sing-box.exe
+  const packagedPath = path.join(process.resourcesPath, binaryName);
+  if (fs.existsSync(packagedPath)) return packagedPath;
+  // Dev mode: binary is in project root
+  const devPath = path.join(__dirname, binaryName);
+  if (fs.existsSync(devPath)) return devPath;
+  return null;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1024,
@@ -37,19 +55,27 @@ app.on('window-all-closed', () => {
   }
 });
 
+// Clean up sing-box process when app quits to prevent orphaned processes
+app.on('before-quit', () => {
+  if (singboxProcess) {
+    singboxProcess.kill();
+    singboxProcess = null;
+  }
+});
+
 // IPC Handlers for Controller
 
 ipcMain.handle('start-singbox', async (event, configJson) => {
   if (singboxProcess) return { status: 'already-running' };
   
-  // Save config to disk before starting
-  const configPath = path.join(__dirname, 'sing-box.json');
+  // Save config to writable userData directory
+  const configPath = path.join(getDataDir(), 'sing-box.json');
   fs.writeFileSync(configPath, configJson);
 
-  const singboxPath = path.join(__dirname, process.platform === 'win32' ? 'sing-box.exe' : 'sing-box');
+  const singboxPath = getSingboxPath();
   
-  if (!fs.existsSync(singboxPath)) {
-    const errorMsg = `[ERROR] Cannot find sing-box executable at ${singboxPath}`;
+  if (!singboxPath) {
+    const errorMsg = '[ERROR] Cannot find sing-box binary. Place sing-box.exe in the app folder.';
     mainWindow.webContents.send('singbox-log', errorMsg);
     return { status: 'error', message: 'binary not found' };
   }
@@ -57,16 +83,29 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
   singboxProcess = spawn(singboxPath, ['run', '-c', configPath]);
 
   singboxProcess.stdout.on('data', (data) => {
-    mainWindow.webContents.send('singbox-log', `[sing-box] ${data.toString().trim()}`);
+    const lines = data.toString().trim().split('\n');
+    lines.forEach(line => {
+      if (line) mainWindow.webContents.send('singbox-log', `[sing-box] ${line}`);
+    });
   });
 
   singboxProcess.stderr.on('data', (data) => {
-    mainWindow.webContents.send('singbox-log', `[sing-box ERR] ${data.toString().trim()}`);
+    const lines = data.toString().trim().split('\n');
+    lines.forEach(line => {
+      if (line) mainWindow.webContents.send('singbox-log', `[sing-box ERR] ${line}`);
+    });
+  });
+
+  singboxProcess.on('error', (err) => {
+    singboxProcess = null;
+    mainWindow.webContents.send('singbox-log', `[ERROR] Failed to start sing-box: ${err.message}`);
+    mainWindow.webContents.send('singbox-status', 'stopped');
   });
 
   singboxProcess.on('close', (code) => {
     singboxProcess = null;
-    mainWindow.webContents.send('singbox-log', `[INFO] sing-box process exited with code ${code}`);
+    mainWindow.webContents.send('singbox-log', `[INFO] sing-box exited with code ${code}`);
+    mainWindow.webContents.send('singbox-status', 'stopped');
   });
 
   mainWindow.webContents.send('singbox-log', '[INFO] sing-box started on 127.0.0.1');
@@ -84,12 +123,12 @@ ipcMain.handle('stop-singbox', async () => {
 });
 
 ipcMain.handle('save-profiles', async (event, data) => {
-  fs.writeFileSync(path.join(__dirname, 'profiles.json'), JSON.stringify(data, null, 2));
+  fs.writeFileSync(path.join(getDataDir(), 'profiles.json'), JSON.stringify(data, null, 2));
   return { success: true };
 });
 
 ipcMain.handle('load-profiles', async () => {
-  const p = path.join(__dirname, 'profiles.json');
+  const p = path.join(getDataDir(), 'profiles.json');
   if (fs.existsSync(p)) {
     return JSON.parse(fs.readFileSync(p, 'utf8'));
   }

@@ -5,5 +5,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopSingbox: () => ipcRenderer.invoke('stop-singbox'),
   saveProfiles: (data) => ipcRenderer.invoke('save-profiles', data),
   loadProfiles: () => ipcRenderer.invoke('load-profiles'),
-  onSingboxLog: (callback) => ipcRenderer.on('singbox-log', (event, log) => callback(log))
+  onSingboxLog: (callback) => ipcRenderer.on('singbox-log', (event, log) => callback(log)),
+  onSingboxStatus: (callback) => ipcRenderer.on('singbox-status', (event, status) => callback(status))
 });
