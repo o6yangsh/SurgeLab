@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SurgeLab Test Runner</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: rgba(30, 41, 59, 0.8);
+      --border: rgba(255,255,255,0.1);
+      --pass: #10b981;
+      --fail: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 40px;
+    }
+    h1 { font-size: 28px; margin-bottom: 8px; }
+    .subtitle { color: var(--muted); margin-bottom: 32px; }
+    .summary {
+      display: flex; gap: 24px; margin-bottom: 32px;
+    }
+    .summary-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 28px;
+      min-width: 140px;
+      text-align: center;
+    }
+    .summary-card .num { font-size: 36px; font-weight: 700; }
+    .summary-card .label { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .suite {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .suite h2 { font-size: 18px; margin-bottom: 16px; }
+    .test-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      font-size: 14px;
+    }
+    .test-row:last-child { border-bottom: none; }
+    .badge {
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      min-width: 50px;
+      text-align: center;
+    }
+    .badge.pass { background: rgba(16, 185, 129, 0.2); color: var(--pass); }
+    .badge.fail { background: rgba(239, 68, 68, 0.2); color: var(--fail); }
+    .error-detail {
+      color: var(--fail);
+      font-family: monospace;
+      font-size: 12px;
+      margin-left: 62px;
+      margin-top: 4px;
+      padding: 8px 12px;
+      background: rgba(239, 68, 68, 0.1);
+      border-radius: 6px;
+    }
+    .time { color: var(--muted); font-size: 12px; margin-left: auto; }
+  </style>
+</head>
+<body>
+  <h1>🧪 SurgeLab Test Runner</h1>
+  <p class="subtitle">Browser-based unit tests — no Node.js required</p>
+
+  <div class="summary">
+    <div class="summary-card">
+      <div class="num" id="total-count">0</div>
+      <div class="label">Total</div>
+    </div>
+    <div class="summary-card">
+      <div class="num" id="pass-count" style="color: var(--pass)">0</div>
+      <div class="label">Passed</div>
+    </div>
+    <div class="summary-card">
+      <div class="num" id="fail-count" style="color: var(--fail)">0</div>
+      <div class="label">Failed</div>
+    </div>
+  </div>
+
+  <div id="results"></div>
+
+  <script src="URIParser.js"></script>
+  <script src="ProfileCompiler.js"></script>
+  <script>
+    // Minimal test framework
+    let totalTests = 0, passedTests = 0, failedTests = 0;
+    const suites = [];
+    let currentSuite = null;
+
+    function describe(name, fn) {
+      currentSuite = { name, tests: [] };
+      suites.push(currentSuite);
+      fn();
+    }
+
+    function test(name, fn) {
+      totalTests++;
+      const start = performance.now();
+      try {
+        fn();
+        passedTests++;
+        const elapsed = (performance.now() - start).toFixed(1);
+        currentSuite.tests.push({ name, passed: true, time: elapsed });
+      } catch (e) {
+        failedTests++;
+        const elapsed = (performance.now() - start).toFixed(1);
+        currentSuite.tests.push({ name, passed: false, time: elapsed, error: e.message });
+      }
+    }
+
+    function expect(val) {
+      return {
+        toBe(expected) {
+          if (val !== expected) throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(val)}`);
+        },
+        toContain(item) {
+          if (!val.includes(item)) throw new Error(`Expected array to contain ${JSON.stringify(item)}`);
+        },
+        toThrow(msg) {
+          // handled by toThrowWrapper
+        }
+      };
+    }
+
+    // ──────────────────────────────────────────────
+    // TEST SUITE 1: URI Parser
+    // ──────────────────────────────────────────────
+    describe('URIParser', () => {
+      test('parses a VLESS + REALITY URI correctly', () => {
+        const uri = 'vless://b831381d-2253-4d56-8255-a0c5bdc6f2a7@example.com:443?security=reality&sni=example.com&pbk=public_key&sid=short_id#My%20Vless';
+        const p = URIParser.parse(uri);
+        expect(p.type).toBe('vless');
+        expect(p.name).toBe('My Vless');
+        expect(p.server).toBe('example.com');
+        expect(p.port).toBe(443);
+        expect(p.uuid).toBe('b831381d-2253-4d56-8255-a0c5bdc6f2a7');
+        expect(p.tls.enabled).toBe(true);
+        expect(p.tls.reality.enabled).toBe(true);
+        expect(p.tls.reality.public_key).toBe('public_key');
+      });
+
+      test('parses a Hysteria2 URI correctly', () => {
+        const p = URIParser.parse('hy2://my-password@server.hy2.com:8443?sni=server.hy2.com#HY2%20Node');
+        expect(p.type).toBe('hysteria2');
+        expect(p.password).toBe('my-password');
+        expect(p.server).toBe('server.hy2.com');
+        expect(p.port).toBe(8443);
+        expect(p.name).toBe('HY2 Node');
+      });
+
+      test('parses hysteria2:// prefix as alias for hy2://', () => {
+        const p = URIParser.parse('hysteria2://pass@server.com:443#Test');
+        expect(p.type).toBe('hysteria2');
+        expect(p.password).toBe('pass');
+      });
+
+      test('parses a Trojan URI correctly', () => {
+        const p = URIParser.parse('trojan://mypassword@jp.example.com:443?sni=jp.example.com#JP-Tokyo');
+        expect(p.type).toBe('trojan');
+        expect(p.password).toBe('mypassword');
+        expect(p.server).toBe('jp.example.com');
+        expect(p.port).toBe(443);
+        expect(p.tls.enabled).toBe(true);
+      });
+
+      test('parses a Shadowsocks SIP002 URI correctly', () => {
+        // aes-256-gcm:testpass in base64 = YWVzLTI1Ni1nY206dGVzdHBhc3M=
+        const p = URIParser.parse('ss://YWVzLTI1Ni1nY206dGVzdHBhc3M=@ss.example.com:8388#SS-Node');
+        expect(p.type).toBe('shadowsocks');
+        expect(p.method).toBe('aes-256-gcm');
+        expect(p.password).toBe('testpass');
+        expect(p.server).toBe('ss.example.com');
+        expect(p.port).toBe(8388);
+      });
+
+      test('parses a VMess base64 URI correctly', () => {
+        const vmessObj = { v: "2", ps: "US-VMess", add: "vmess.example.com", port: "443", id: "some-uuid", aid: "0", scy: "auto", tls: "tls", sni: "vmess.example.com" };
+        const uri = 'vmess://' + btoa(JSON.stringify(vmessObj));
+        const p = URIParser.parse(uri);
+        expect(p.type).toBe('vmess');
+        expect(p.name).toBe('US-VMess');
+        expect(p.server).toBe('vmess.example.com');
+        expect(p.port).toBe(443);
+        expect(p.uuid).toBe('some-uuid');
+        expect(p.tls.enabled).toBe(true);
+      });
+
+      test('throws on empty URI', () => {
+        let threw = false;
+        try { URIParser.parse(''); } catch(e) { threw = true; }
+        expect(threw).toBe(true);
+      });
+
+      test('throws on unsupported scheme', () => {
+        let threw = false;
+        try { URIParser.parse('ftp://example.com'); } catch(e) { threw = true; }
+        expect(threw).toBe(true);
+      });
+    });
+
+    // ──────────────────────────────────────────────
+    // TEST SUITE 2: Profile Compiler
+    // ──────────────────────────────────────────────
+    describe('ProfileCompiler', () => {
+      const mockNodes = [
+        { type: 'vless', name: 'Proxy1', server: 'us.example.com', port: 443, uuid: 'some-uuid', tls: { enabled: true } }
+      ];
+      const mockRules = [
+        { domain_suffix: ['google.com'], outbound: 'Proxy1' },
+        { geosite: 'cn', outbound: 'direct' }
+      ];
+      const mockDns = { local: '114.114.114.114', remote: 'https://doh.example.com' };
+
+      test('compiles TUN mode config with correct inbound', () => {
+        const config = ProfileCompiler.compile(mockNodes, mockRules, mockDns, 'tun');
+        expect(config.inbounds[0].type).toBe('tun');
+        expect(config.inbounds[0].interface_name).toBe('tun0');
+        expect(config.inbounds[0].strict_route).toBe(true);
+      });
+
+      test('compiles System Proxy mode with 127.0.0.1 binding', () => {
+        const config = ProfileCompiler.compile(mockNodes, mockRules, mockDns, 'system');
+        expect(config.inbounds[0].type).toBe('mixed');
+        expect(config.inbounds[0].listen).toBe('127.0.0.1');
+      });
+
+      test('uses custom DNS settings', () => {
+        const config = ProfileCompiler.compile(mockNodes, mockRules, mockDns, 'tun');
+        expect(config.dns.servers[0].address).toBe('https://doh.example.com');
+        expect(config.dns.servers[1].address).toBe('114.114.114.114');
+      });
+
+      test('includes direct, block, dns-out default outbounds', () => {
+        const config = ProfileCompiler.compile(mockNodes, mockRules, mockDns, 'tun');
+        const tags = config.outbounds.map(o => o.tag);
+        expect(tags.includes('direct')).toBe(true);
+        expect(tags.includes('block')).toBe(true);
+        expect(tags.includes('dns-out')).toBe(true);
+      });
+
+      test('compiles routing rules correctly', () => {
+        const config = ProfileCompiler.compile(mockNodes, mockRules, mockDns, 'tun');
+        expect(config.route.rules.length).toBe(2);
+        expect(config.route.rules[0].outbound).toBe('Proxy1');
+      });
+    });
+
+    // ──────────────────────────────────────────────
+    // TEST SUITE 3: Secret Redaction
+    // ──────────────────────────────────────────────
+    describe('Secret Redaction', () => {
+      test('masks UUID and password in redacted export', () => {
+        const nodes = [{ type: 'vless', uuid: 'real-uuid', password: 'real-pass' }];
+        const redacted = ProfileCompiler.redactProfile(nodes);
+        expect(redacted[0].uuid).toBe('MASKED_UUID');
+        expect(redacted[0].password).toBe('MASKED_PASSWORD');
+      });
+
+      test('does NOT mutate original profiles (deep clone test)', () => {
+        const nodes = [{ type: 'vless', uuid: 'real-uuid', tls: { reality: { public_key: 'pk', short_id: 'sid' } } }];
+        ProfileCompiler.redactProfile(nodes);
+        expect(nodes[0].uuid).toBe('real-uuid');
+        expect(nodes[0].tls.reality.public_key).toBe('pk');
+      });
+
+      test('masks REALITY public_key and short_id', () => {
+        const nodes = [{ type: 'vless', tls: { reality: { public_key: 'pk', short_id: 'sid' } } }];
+        const redacted = ProfileCompiler.redactProfile(nodes);
+        expect(redacted[0].tls.reality.public_key).toBe('MASKED_PUBLIC_KEY');
+        expect(redacted[0].tls.reality.short_id).toBe('MASKED_SHORT_ID');
+      });
+    });
+
+    // ──────────────────────────────────────────────
+    // TEST SUITE 4: Security Constraints
+    // ──────────────────────────────────────────────
+    describe('Security Constraints', () => {
+      test('System Proxy mode never binds to 0.0.0.0', () => {
+        const config = ProfileCompiler.compile([], [], {}, 'system');
+        expect(config.inbounds[0].listen).toBe('127.0.0.1');
+      });
+
+      test('TUN mode enables strict_route to prevent LAN leaks', () => {
+        const config = ProfileCompiler.compile([], [], {}, 'tun');
+        expect(config.inbounds[0].strict_route).toBe(true);
+      });
+    });
+
+    // ──────────────────────────────────────────────
+    // Render Results
+    // ──────────────────────────────────────────────
+    document.getElementById('total-count').textContent = totalTests;
+    document.getElementById('pass-count').textContent = passedTests;
+    document.getElementById('fail-count').textContent = failedTests;
+
+    const container = document.getElementById('results');
+    suites.forEach(suite => {
+      let html = `<div class="suite"><h2>${suite.name}</h2>`;
+      suite.tests.forEach(t => {
+        const badge = t.passed ? '<span class="badge pass">PASS</span>' : '<span class="badge fail">FAIL</span>';
+        html += `<div class="test-row">${badge} <span>${t.name}</span> <span class="time">${t.time}ms</span></div>`;
+        if (!t.passed) {
+          html += `<div class="error-detail">${t.error}</div>`;
+        }
+      });
+      html += '</div>';
+      container.innerHTML += html;
+    });
+  </script>
+</body>
+</html>
