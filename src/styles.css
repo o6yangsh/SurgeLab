@@ -274,3 +274,20 @@ body {
   background: rgba(239, 68, 68, 0.1);
 }
 .preview-result { margin-top: 12px; font-weight: bold; }
+
+.node-item .delete-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  transition: color 0.2s ease;
+  line-height: 1;
+}
+
+.node-item .delete-btn:hover {
+  color: var(--danger);
+}

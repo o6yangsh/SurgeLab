@@ -48,7 +48,10 @@ btnStart.addEventListener('click', async () => {
   // Default routing rule to send traffic to the first imported proxy
   const activeOutbound = profiles.length > 0 ? profiles[0].name : 'direct';
   const currentRules = [{ domain_suffix: ['google.com'], outbound: activeOutbound }, { geosite: 'cn', outbound: 'direct' }];
-  const currentDns = { local: '223.5.5.5', remote: 'https://cloudflare-dns.com/dns-query' };
+  
+  const localDnsVal = document.getElementById('local-dns-input').value.trim() || '223.5.5.5';
+  const remoteDnsVal = document.getElementById('remote-dns-input').value.trim() || 'https://cloudflare-dns.com/dns-query';
+  const currentDns = { local: localDnsVal, remote: remoteDnsVal };
   
   const compiledObj = ProfileCompiler.compile(profiles, currentRules, currentDns, mode);
   const configJson = JSON.stringify(compiledObj, null, 2);
@@ -92,9 +95,22 @@ const uriInput = document.getElementById('uri-input');
 const nodeList = document.getElementById('node-list');
 let profiles = [];
 
+// Load profiles at startup
+if (window.electronAPI) {
+  window.electronAPI.loadProfiles().then(loadedProfiles => {
+    if (loadedProfiles && loadedProfiles.length > 0) {
+      profiles = loadedProfiles;
+      renderProfiles();
+      addLog(`[INFO] Loaded ${profiles.length} profiles from storage.`);
+    }
+  }).catch(err => {
+    addLog(`[ERROR] Failed to load profiles: ${err.message}`);
+  });
+}
+
 function renderProfiles() {
   nodeList.innerHTML = '';
-  profiles.forEach(p => {
+  profiles.forEach((p, index) => {
     const div = document.createElement('div');
     div.className = 'node-item';
     
@@ -103,15 +119,30 @@ function renderProfiles() {
 
     div.innerHTML = `
       <span class="type">${p.type.toUpperCase()}</span>
-      <div style="font-weight: 600;">${p.name || p.server}</div>
+      <div style="font-weight: 600; padding-right: 25px;">${p.name || p.server}</div>
       <div style="font-size: 12px; color: var(--text-muted)">${p.server}:${p.port}</div>
       <div style="font-size: 12px; color: var(--text-muted)">Pass: ${maskedPass}</div>
+      <button class="delete-btn" data-index="${index}">✕</button>
     `;
     nodeList.appendChild(div);
   });
+
+  // Attach delete event listeners
+  const deleteBtns = nodeList.querySelectorAll('.delete-btn');
+  deleteBtns.forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const index = parseInt(btn.getAttribute('data-index'), 10);
+      const deletedNode = profiles.splice(index, 1)[0];
+      renderProfiles();
+      addLog(`[INFO] Deleted node: ${deletedNode.name || deletedNode.server}`);
+      if (window.electronAPI) {
+        await window.electronAPI.saveProfiles(profiles);
+      }
+    });
+  });
 }
 
-btnImport.addEventListener('click', () => {
+btnImport.addEventListener('click', async () => {
   const uri = uriInput.value.trim();
   if (!uri) return;
   
@@ -121,6 +152,11 @@ btnImport.addEventListener('click', () => {
     renderProfiles();
     addLog(`[INFO] Imported ${parsedNode.type} node: ${parsedNode.name}`);
     uriInput.value = '';
+    
+    // Save profiles to persistent storage
+    if (window.electronAPI) {
+      await window.electronAPI.saveProfiles(profiles);
+    }
   } catch (err) {
     addLog(`[ERROR] Failed to parse URI: ${err.message}`);
   }
@@ -161,7 +197,10 @@ btnExportConfig.addEventListener('click', () => {
   const mode = document.getElementById('mode-select').value;
   // Mock rules and dns for export
   const mockRules = [{ domain_suffix: ['google.com'], outbound: 'PROXY' }];
-  const mockDns = { local: '223.5.5.5', remote: 'https://cloudflare-dns.com/dns-query' };
+  
+  const localDnsVal = document.getElementById('local-dns-input').value.trim() || '223.5.5.5';
+  const remoteDnsVal = document.getElementById('remote-dns-input').value.trim() || 'https://cloudflare-dns.com/dns-query';
+  const mockDns = { local: localDnsVal, remote: remoteDnsVal };
   
   const config = ProfileCompiler.compile(profiles, mockRules, mockDns, mode);
   triggerDownload('sing-box.json', JSON.stringify(config, null, 2));
@@ -173,3 +212,18 @@ btnExportProfile.addEventListener('click', () => {
   triggerDownload('redacted-profiles.json', JSON.stringify(redacted, null, 2));
   addLog('[INFO] Exported redacted profiles');
 });
+
+// Open Log File click event
+const btnOpenLogs = document.getElementById('btn-open-logs');
+if (btnOpenLogs) {
+  btnOpenLogs.addEventListener('click', async () => {
+    if (window.electronAPI) {
+      const result = await window.electronAPI.openLogFile();
+      if (!result.success) {
+        addLog(`[ERROR] ${result.message}`);
+      }
+    } else {
+      addLog('[INFO] Mock opening logs folder (running in browser)');
+    }
+  });
+}

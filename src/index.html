@@ -115,12 +115,12 @@
           <p>Manage local and remote DNS resolution</p>
         </header>
         <div class="card glass-panel form-group">
-          <label>Local DNS</label>
-          <input type="text" class="premium-input" value="223.5.5.5">
-          <label>Remote DNS (DoH/DoT)</label>
-          <input type="text" class="premium-input" value="https://cloudflare-dns.com/dns-query">
+          <label for="local-dns-input">Local DNS</label>
+          <input type="text" id="local-dns-input" class="premium-input" value="223.5.5.5">
+          <label for="remote-dns-input">Remote DNS (DoH/DoT)</label>
+          <input type="text" id="remote-dns-input" class="premium-input" value="https://cloudflare-dns.com/dns-query">
           <label class="checkbox-label">
-            <input type="checkbox" checked>
+            <input type="checkbox" id="fake-ip-checkbox" checked>
             Enable Fake-IP
           </label>
         </div>
@@ -140,6 +140,11 @@
           <div class="card glass-panel diag-card">
             <h3>DNS Resolution Test</h3>
             <button class="btn btn-secondary">Run Test</button>
+          </div>
+          <div class="card glass-panel diag-card">
+            <h3>System Logs</h3>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">View detailed logs of the sing-box core engine.</p>
+            <button id="btn-open-logs" class="btn btn-secondary">Open Log File</button>
           </div>
           <div class="card glass-panel diag-card webrtc-warning">
             <h3>WebRTC Leak Warning</h3>

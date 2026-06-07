@@ -26,7 +26,8 @@ class ProfileCompiler {
                 {
                     tag: "remote",
                     address: dnsSettings.remote || "https://cloudflare-dns.com/dns-query",
-                    detour: "proxy"
+                    detour: "proxy",
+                    address_resolver: "local"
                 },
                 {
                     tag: "local",

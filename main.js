@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -72,6 +72,14 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
   const configPath = path.join(getDataDir(), 'sing-box.json');
   fs.writeFileSync(configPath, configJson);
 
+  // Initialize persistent log file
+  const logFile = path.join(getDataDir(), 'sing-box.log');
+  try {
+    fs.writeFileSync(logFile, '');
+  } catch (err) {
+    console.error('Failed to init log file:', err);
+  }
+
   const singboxPath = getSingboxPath();
   
   if (!singboxPath) {
@@ -83,6 +91,9 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
   singboxProcess = spawn(singboxPath, ['run', '-c', configPath]);
 
   singboxProcess.stdout.on('data', (data) => {
+    try {
+      fs.appendFileSync(logFile, data);
+    } catch (e) {}
     const lines = data.toString().trim().split('\n');
     lines.forEach(line => {
       if (line) mainWindow.webContents.send('singbox-log', `[sing-box] ${line}`);
@@ -90,6 +101,9 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
   });
 
   singboxProcess.stderr.on('data', (data) => {
+    try {
+      fs.appendFileSync(logFile, data);
+    } catch (e) {}
     const lines = data.toString().trim().split('\n');
     lines.forEach(line => {
       if (line) mainWindow.webContents.send('singbox-log', `[sing-box ERR] ${line}`);
@@ -133,4 +147,13 @@ ipcMain.handle('load-profiles', async () => {
     return JSON.parse(fs.readFileSync(p, 'utf8'));
   }
   return [];
+});
+
+ipcMain.handle('open-log-file', async () => {
+  const logPath = path.join(getDataDir(), 'sing-box.log');
+  if (fs.existsSync(logPath)) {
+    await shell.openPath(logPath);
+    return { success: true };
+  }
+  return { success: false, message: 'Log file does not exist.' };
 });

@@ -38,6 +38,11 @@ describe('ProfileCompiler', () => {
         expect(config.dns.servers[1].address).toBe('114.114.114.114');
     });
 
+    test('includes address_resolver for remote DNS server', () => {
+        const config = ProfileCompiler.compile(mockNodes, mockRules, mockDns, 'tun');
+        expect(config.dns.servers[0].address_resolver).toBe('local');
+    });
+
     test('includes default outbounds (direct, block, dns-out)', () => {
         const config = ProfileCompiler.compile(mockNodes, mockRules, mockDns, 'tun');
         const tags = config.outbounds.map(o => o.tag);
