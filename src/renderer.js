@@ -24,6 +24,10 @@ function addLog(msg) {
   const div = document.createElement('div');
   div.textContent = msg;
   logConsole.appendChild(div);
+  // Prevent memory leak: limit log entries to 500
+  while (logConsole.children.length > 500) {
+    logConsole.removeChild(logConsole.firstChild);
+  }
   logConsole.scrollTop = logConsole.scrollHeight;
 }
 
@@ -51,6 +55,20 @@ btnStart.addEventListener('click', async () => {
   
   const localDnsVal = document.getElementById('local-dns-input').value.trim() || '223.5.5.5';
   const remoteDnsVal = document.getElementById('remote-dns-input').value.trim() || 'https://cloudflare-dns.com/dns-query';
+  
+  // Security: Validate DNS input formats
+  const ipRegex = /^\d{1,3}(\.\d{1,3}){3}$/;
+  const dohRegex = /^https:\/\/.+/;
+  if (!ipRegex.test(localDnsVal)) {
+    addLog(`[SECURITY] Invalid Local DNS format: "${localDnsVal}". Must be an IPv4 address (e.g., 223.5.5.5).`);
+    btnStart.disabled = false;
+    return;
+  }
+  if (!dohRegex.test(remoteDnsVal)) {
+    addLog(`[SECURITY] Invalid Remote DNS format: "${remoteDnsVal}". Must be an HTTPS URL (e.g., https://cloudflare-dns.com/dns-query).`);
+    btnStart.disabled = false;
+    return;
+  }
   const currentDns = { local: localDnsVal, remote: remoteDnsVal };
   
   const compiledObj = ProfileCompiler.compile(profiles, currentRules, currentDns, mode);
@@ -113,25 +131,35 @@ function renderProfiles() {
   profiles.forEach((p, index) => {
     const div = document.createElement('div');
     div.className = 'node-item';
-    
-    // Mask password logic
-    const maskedPass = '*'.repeat(8);
 
-    div.innerHTML = `
-      <span class="type">${p.type.toUpperCase()}</span>
-      <div style="font-weight: 600; padding-right: 25px;">${p.name || p.server}</div>
-      <div style="font-size: 12px; color: var(--text-muted)">${p.server}:${p.port}</div>
-      <div style="font-size: 12px; color: var(--text-muted)">Pass: ${maskedPass}</div>
-      <button class="delete-btn" data-index="${index}">✕</button>
-    `;
-    nodeList.appendChild(div);
-  });
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'type';
+    typeSpan.textContent = p.type.toUpperCase();
+    div.appendChild(typeSpan);
 
-  // Attach delete event listeners
-  const deleteBtns = nodeList.querySelectorAll('.delete-btn');
-  deleteBtns.forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      const index = parseInt(btn.getAttribute('data-index'), 10);
+    const nameDiv = document.createElement('div');
+    nameDiv.style.fontWeight = '600';
+    nameDiv.style.paddingRight = '25px';
+    nameDiv.textContent = p.name || p.server;
+    div.appendChild(nameDiv);
+
+    const addrDiv = document.createElement('div');
+    addrDiv.style.fontSize = '12px';
+    addrDiv.style.color = 'var(--text-muted)';
+    addrDiv.textContent = `${p.server}:${p.port}`;
+    div.appendChild(addrDiv);
+
+    const passDiv = document.createElement('div');
+    passDiv.style.fontSize = '12px';
+    passDiv.style.color = 'var(--text-muted)';
+    passDiv.textContent = 'Pass: ********';
+    div.appendChild(passDiv);
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'delete-btn';
+    deleteBtn.setAttribute('data-index', index);
+    deleteBtn.textContent = '✕';
+    deleteBtn.addEventListener('click', async () => {
       const deletedNode = profiles.splice(index, 1)[0];
       renderProfiles();
       addLog(`[INFO] Deleted node: ${deletedNode.name || deletedNode.server}`);
@@ -139,6 +167,9 @@ function renderProfiles() {
         await window.electronAPI.saveProfiles(profiles);
       }
     });
+    div.appendChild(deleteBtn);
+
+    nodeList.appendChild(div);
   });
 }
 

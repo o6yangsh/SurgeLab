@@ -43,7 +43,7 @@
       "tag": "proxy",
       "server": "us-west-vless.example.com",
       "server_port": 443,
-      "uuid": "b831381d-2253-4d56-8255-a0c5bdc6f2a7",
+      "uuid": "MASKED_UUID",
       "tls": {
         "enabled": true,
         "server_name": "us-west-vless.example.com",

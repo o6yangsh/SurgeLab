@@ -232,6 +232,7 @@ body {
 }
 
 .node-item {
+  position: relative;
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
   padding: 16px;

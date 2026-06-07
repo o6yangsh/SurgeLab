@@ -7,6 +7,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadProfiles: () => ipcRenderer.invoke('load-profiles'),
   openLogFile: () => ipcRenderer.invoke('open-log-file'),
   exportLogFile: () => ipcRenderer.invoke('export-log-file'),
-  onSingboxLog: (callback) => ipcRenderer.on('singbox-log', (event, log) => callback(log)),
-  onSingboxStatus: (callback) => ipcRenderer.on('singbox-status', (event, status) => callback(status))
+  onSingboxLog: (callback) => {
+    const handler = (_event, log) => callback(log);
+    ipcRenderer.on('singbox-log', handler);
+    return () => ipcRenderer.removeListener('singbox-log', handler);
+  },
+  onSingboxStatus: (callback) => {
+    const handler = (_event, status) => callback(status);
+    ipcRenderer.on('singbox-status', handler);
+    return () => ipcRenderer.removeListener('singbox-status', handler);
+  }
 });
