@@ -1,0 +1,16 @@
+[System] SurgeLab Ready.
+[INFO] Imported vless node: VLESS Node
+[INFO] sing-box started on 127.0.0.1
+[sing-box ERR] +0800 2026-06-07 16:41:07 [36mINFO[0m router: updated default interface WLAN, index 16
+[sing-box ERR] +0800 2026-06-07 16:41:07 [33mWARN[0m router: geosite database not exists: geosite.db
+[sing-box ERR] +0800 2026-06-07 16:41:07 [36mINFO[0m router: downloading geosite database
+[sing-box ERR] +0800 2026-06-07 16:41:07 [36mINFO[0m outbound/vless[VLESS Node]: outbound connection to github.com:443
+[sing-box ERR] +0800 2026-06-07 16:41:07 [31mERROR[0m router: download geosite database: Get "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db": invalid address
+[sing-box ERR] +0800 2026-06-07 16:41:07 [36mINFO[0m router: downloading geosite database
+[sing-box ERR] +0800 2026-06-07 16:41:07 [36mINFO[0m outbound/vless[VLESS Node]: outbound connection to github.com:443
+[sing-box ERR] +0800 2026-06-07 16:41:07 [31mERROR[0m router: download geosite database: Get "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db": invalid address
+[sing-box ERR] +0800 2026-06-07 16:41:07 [36mINFO[0m router: downloading geosite database
+[sing-box ERR] +0800 2026-06-07 16:41:07 [36mINFO[0m outbound/vless[VLESS Node]: outbound connection to github.com:443
+[sing-box ERR] +0800 2026-06-07 16:41:07 [31mERROR[0m router: download geosite database: Get "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db": invalid address
+[sing-box ERR] [31mFATAL[0m[0000] start service: Get "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db": invalid address
+[INFO] sing-box exited with code 1

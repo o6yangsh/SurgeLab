@@ -1,6 +1,7 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Menu, MenuItem, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
 const { spawn } = require('child_process');
 
 let mainWindow;
@@ -24,6 +25,39 @@ function getSingboxPath() {
   return null;
 }
 
+// Download helper with redirect support
+function downloadFile(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const request = https.get(url, (response) => {
+      // Handle redirects (e.g. 301, 302)
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        file.close();
+        fs.unlink(dest, () => {}); // delete partial file
+        return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+      }
+      
+      if (response.statusCode !== 200) {
+        file.close();
+        fs.unlink(dest, () => {});
+        return reject(new Error(`Failed to get '${url}' (status code: ${response.statusCode})`));
+      }
+
+      response.pipe(file);
+      
+      file.on('finish', () => {
+        file.close(resolve);
+      });
+    });
+
+    request.on('error', (err) => {
+      file.close();
+      fs.unlink(dest, () => {});
+      reject(err);
+    });
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1024,
@@ -37,9 +71,36 @@ function createWindow() {
   });
 
   mainWindow.loadFile('src/index.html');
+
+  // Context Menu for Copy/Paste
+  mainWindow.webContents.on('context-menu', (e, params) => {
+    const menu = new Menu();
+
+    if (params.isEditable) {
+      menu.append(new MenuItem({ label: 'Cut', role: 'cut', enabled: params.selectionText.length > 0 }));
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy', enabled: params.selectionText.length > 0 }));
+      menu.append(new MenuItem({ label: 'Paste', role: 'paste' }));
+      menu.append(new MenuItem({ type: 'separator' }));
+      menu.append(new MenuItem({ label: 'Select All', role: 'selectall' }));
+    } else {
+      menu.append(new MenuItem({ label: 'Copy', role: 'copy', enabled: params.selectionText.length > 0 }));
+      menu.append(new MenuItem({ label: 'Select All', role: 'selectall' }));
+    }
+
+    menu.popup({ window: mainWindow });
+  });
 }
 
 app.whenReady().then(() => {
+  if (app.setAboutPanelOptions) {
+    app.setAboutPanelOptions({
+      applicationName: 'SurgeLab',
+      applicationVersion: '1.2.0',
+      version: 'v1.2.0',
+      copyright: 'Copyright © 2026 SurgeLab Team',
+      authors: ['SurgeLab Team']
+    });
+  }
   createWindow();
 
   app.on('activate', () => {
@@ -80,6 +141,25 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
     console.error('Failed to init log file:', err);
   }
 
+  // Ensure geosite.db and geoip.db exist locally to prevent offline crash
+  const geositePath = path.join(getDataDir(), 'geosite.db');
+  const geoipPath = path.join(getDataDir(), 'geoip.db');
+  if (!fs.existsSync(geositePath) || !fs.existsSync(geoipPath)) {
+    mainWindow.webContents.send('singbox-log', '[INFO] geoip.db or geosite.db is missing. Downloading from mirror (ghproxy)...');
+    try {
+      if (!fs.existsSync(geositePath)) {
+        await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db', geositePath);
+        mainWindow.webContents.send('singbox-log', '[INFO] geosite.db downloaded successfully.');
+      }
+      if (!fs.existsSync(geoipPath)) {
+        await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip.db', geoipPath);
+        mainWindow.webContents.send('singbox-log', '[INFO] geoip.db downloaded successfully.');
+      }
+    } catch (err) {
+      mainWindow.webContents.send('singbox-log', `[WARNING] Failed to download geo databases: ${err.message}. sing-box may fail to start.`);
+    }
+  }
+
   const singboxPath = getSingboxPath();
   
   if (!singboxPath) {
@@ -88,7 +168,7 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
     return { status: 'error', message: 'binary not found' };
   }
 
-  singboxProcess = spawn(singboxPath, ['run', '-c', configPath]);
+  singboxProcess = spawn(singboxPath, ['run', '-c', configPath], { cwd: getDataDir() });
 
   singboxProcess.stdout.on('data', (data) => {
     try {
@@ -156,4 +236,30 @@ ipcMain.handle('open-log-file', async () => {
     return { success: true };
   }
   return { success: false, message: 'Log file does not exist.' };
+});
+
+ipcMain.handle('export-log-file', async () => {
+  const logPath = path.join(getDataDir(), 'sing-box.log');
+  if (!fs.existsSync(logPath)) {
+    return { success: false, message: 'Log file is empty or does not exist.' };
+  }
+
+  const { filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export System Logs',
+    defaultPath: path.join(app.getPath('desktop'), 'SurgeLab_Logs.txt'),
+    filters: [
+      { name: 'Text Files', extensions: ['txt'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (filePath) {
+    try {
+      fs.copyFileSync(logPath, filePath);
+      return { success: true, filePath };
+    } catch (err) {
+      return { success: false, message: `Failed to save file: ${err.message}` };
+    }
+  }
+  return { success: false, cancelled: true };
 });

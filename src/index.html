@@ -21,6 +21,7 @@
         <button class="nav-btn" data-target="dns">DNS Settings</button>
         <button class="nav-btn" data-target="diagnostics">Diagnostics</button>
         <button class="nav-btn" data-target="export">Export</button>
+        <button class="nav-btn" data-target="help">Help & About</button>
       </nav>
       <div class="sidebar-footer">
         <p>Local Controller: 127.0.0.1</p>
@@ -143,8 +144,11 @@
           </div>
           <div class="card glass-panel diag-card">
             <h3>System Logs</h3>
-            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">View detailed logs of the sing-box core engine.</p>
-            <button id="btn-open-logs" class="btn btn-secondary">Open Log File</button>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">View or export detailed logs of the sing-box core engine.</p>
+            <div style="display: flex; gap: 10px;">
+              <button id="btn-open-logs" class="btn btn-secondary">Open Log File</button>
+              <button id="btn-export-logs" class="btn btn-primary">Export logs to .txt</button>
+            </div>
           </div>
           <div class="card glass-panel diag-card webrtc-warning">
             <h3>WebRTC Leak Warning</h3>
@@ -163,6 +167,29 @@
         <div class="card glass-panel">
           <button id="btn-export-config" class="btn btn-primary">Export sing-box.json</button>
           <button id="btn-export-profile" class="btn btn-secondary">Export Redacted Profile</button>
+        </div>
+      </section>
+
+      <!-- Help View -->
+      <section id="help" class="view hidden">
+        <header class="view-header">
+          <h1>Help & About</h1>
+          <p>About SurgeLab and system information</p>
+        </header>
+        <div class="card glass-panel">
+          <h3>SurgeLab</h3>
+          <p>Version: <strong>v1.2.0</strong></p>
+          <p style="margin-top: 10px; color: var(--text-muted);">A local proxy configuration lab and controller for sing-box.</p>
+        </div>
+        <div class="card glass-panel">
+          <h3>Keyboard Shortcuts</h3>
+          <p style="font-size: 14px; margin-bottom: 8px;">Standard editing shortcuts are supported:</p>
+          <ul style="list-style-type: disc; margin-left: 20px; color: var(--text-muted); font-size: 13px;">
+            <li>Copy: <kbd>Ctrl+C</kbd> / <kbd>Cmd+C</kbd></li>
+            <li>Paste: <kbd>Ctrl+V</kbd> / <kbd>Cmd+V</kbd></li>
+            <li>Cut: <kbd>Ctrl+X</kbd> / <kbd>Cmd+X</kbd></li>
+            <li>Select All: <kbd>Ctrl+A</kbd> / <kbd>Cmd+A</kbd></li>
+          </ul>
         </div>
       </section>
 

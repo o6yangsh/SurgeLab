@@ -227,3 +227,20 @@ if (btnOpenLogs) {
     }
   });
 }
+
+// Export Log File click event
+const btnExportLogs = document.getElementById('btn-export-logs');
+if (btnExportLogs) {
+  btnExportLogs.addEventListener('click', async () => {
+    if (window.electronAPI) {
+      const result = await window.electronAPI.exportLogFile();
+      if (result.success) {
+        addLog(`[INFO] Logs exported successfully to ${result.filePath}`);
+      } else if (!result.cancelled) {
+        addLog(`[ERROR] ${result.message}`);
+      }
+    } else {
+      addLog('[INFO] Mock exporting logs to txt (running in browser)');
+    }
+  });
+}
