@@ -1,6 +1,6 @@
 {
   "name": "surgelab",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "SurgeLab - Local proxy configuration lab for Windows",
   "main": "main.js",
   "scripts": {
@@ -26,6 +26,16 @@
       {
         "from": "sing-box.exe",
         "to": "sing-box.exe",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "geoip.db",
+        "to": "geoip.db",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "geosite.db",
+        "to": "geosite.db",
         "filter": ["**/*"]
       }
     ]

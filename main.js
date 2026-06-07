@@ -25,6 +25,17 @@ function getSingboxPath() {
   return null;
 }
 
+// Find packaged resource: check extraResources first (packaged), then project root (dev)
+function getResourcePath(filename) {
+  // Packaged app: files are in resources/
+  const packagedPath = path.join(process.resourcesPath, filename);
+  if (fs.existsSync(packagedPath)) return packagedPath;
+  // Dev mode: files are in project root
+  const devPath = path.join(__dirname, filename);
+  if (fs.existsSync(devPath)) return devPath;
+  return null;
+}
+
 // Download helper with redirect support
 function downloadFile(url, dest) {
   return new Promise((resolve, reject) => {
@@ -95,8 +106,8 @@ app.whenReady().then(() => {
   if (app.setAboutPanelOptions) {
     app.setAboutPanelOptions({
       applicationName: 'SurgeLab',
-      applicationVersion: '1.2.0',
-      version: 'v1.2.0',
+      applicationVersion: '1.3.0',
+      version: 'v1.3.0',
       copyright: 'Copyright © 2026 SurgeLab Team',
       authors: ['SurgeLab Team']
     });
@@ -141,22 +152,36 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
     console.error('Failed to init log file:', err);
   }
 
-  // Ensure geosite.db and geoip.db exist locally to prevent offline crash
+  // Ensure geosite.db and geoip.db exist locally in userData
   const geositePath = path.join(getDataDir(), 'geosite.db');
   const geoipPath = path.join(getDataDir(), 'geoip.db');
   if (!fs.existsSync(geositePath) || !fs.existsSync(geoipPath)) {
-    mainWindow.webContents.send('singbox-log', '[INFO] geoip.db or geosite.db is missing. Downloading from mirror (ghproxy)...');
+    mainWindow.webContents.send('singbox-log', '[INFO] geoip.db or geosite.db is missing in application data. Initializing from bundle...');
     try {
       if (!fs.existsSync(geositePath)) {
-        await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db', geositePath);
-        mainWindow.webContents.send('singbox-log', '[INFO] geosite.db downloaded successfully.');
+        const bundledGeosite = getResourcePath('geosite.db');
+        if (bundledGeosite) {
+          fs.copyFileSync(bundledGeosite, geositePath);
+          mainWindow.webContents.send('singbox-log', '[INFO] geosite.db copied from bundle (offline).');
+        } else {
+          mainWindow.webContents.send('singbox-log', '[INFO] Bundled geosite.db not found. Downloading from mirror (ghproxy)...');
+          await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db', geositePath);
+          mainWindow.webContents.send('singbox-log', '[INFO] geosite.db downloaded successfully.');
+        }
       }
       if (!fs.existsSync(geoipPath)) {
-        await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip.db', geoipPath);
-        mainWindow.webContents.send('singbox-log', '[INFO] geoip.db downloaded successfully.');
+        const bundledGeoip = getResourcePath('geoip.db');
+        if (bundledGeoip) {
+          fs.copyFileSync(bundledGeoip, geoipPath);
+          mainWindow.webContents.send('singbox-log', '[INFO] geoip.db copied from bundle (offline).');
+        } else {
+          mainWindow.webContents.send('singbox-log', '[INFO] Bundled geoip.db not found. Downloading from mirror (ghproxy)...');
+          await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip.db', geoipPath);
+          mainWindow.webContents.send('singbox-log', '[INFO] geoip.db downloaded successfully.');
+        }
       }
     } catch (err) {
-      mainWindow.webContents.send('singbox-log', `[WARNING] Failed to download geo databases: ${err.message}. sing-box may fail to start.`);
+      mainWindow.webContents.send('singbox-log', `[WARNING] Failed to initialize geo databases: ${err.message}. sing-box may fail to start.`);
     }
   }
 
@@ -203,6 +228,32 @@ ipcMain.handle('start-singbox', async (event, configJson) => {
   });
 
   mainWindow.webContents.send('singbox-log', '[INFO] sing-box started on 127.0.0.1');
+
+  // Trigger background database update after 30 seconds to keep databases fresh
+  setTimeout(async () => {
+    if (!singboxProcess) return;
+    mainWindow.webContents.send('singbox-log', '[INFO] Starting background check for geo database updates...');
+    const tempGeosite = path.join(getDataDir(), 'geosite.db.tmp');
+    const tempGeoip = path.join(getDataDir(), 'geoip.db.tmp');
+    try {
+      await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db', tempGeosite);
+      if (fs.existsSync(tempGeosite)) {
+        fs.copyFileSync(tempGeosite, geositePath);
+        fs.unlinkSync(tempGeosite);
+      }
+      await downloadFile('https://mirror.ghproxy.com/https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip.db', tempGeoip);
+      if (fs.existsSync(tempGeoip)) {
+        fs.copyFileSync(tempGeoip, geoipPath);
+        fs.unlinkSync(tempGeoip);
+      }
+      mainWindow.webContents.send('singbox-log', '[INFO] Background update of geoip.db and geosite.db completed successfully.');
+    } catch (err) {
+      mainWindow.webContents.send('singbox-log', `[WARNING] Background update of geo databases failed: ${err.message}. Will retry on next startup.`);
+      try { if (fs.existsSync(tempGeosite)) fs.unlinkSync(tempGeosite); } catch (e) {}
+      try { if (fs.existsSync(tempGeoip)) fs.unlinkSync(tempGeoip); } catch (e) {}
+    }
+  }, 30000);
+
   return { status: 'running', pid: singboxProcess.pid };
 });
 
