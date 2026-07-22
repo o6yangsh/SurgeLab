@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; img-src 'self' data:; connect-src 'self' stun:;">
   <title>SurgeLab</title>
   <link rel="stylesheet" href="styles.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -74,7 +74,7 @@
         <div class="card glass-panel">
           <h3>Quick Import URI</h3>
           <div class="import-row">
-            <input type="text" id="uri-input" class="premium-input" placeholder="ss://, trojan://, vmess://, vless://, hy2://">
+            <textarea id="uri-input" class="premium-input uri-input" rows="3" placeholder="Paste one or more ss://, trojan://, vmess://, vless://, or hy2:// links"></textarea>
             <button id="btn-import" class="btn btn-primary">Import</button>
           </div>
         </div>
@@ -98,15 +98,27 @@
           <p id="preview-result" class="preview-result"></p>
         </div>
         <div class="card glass-panel">
-          <h3>Rule Groups</h3>
-          <div class="rule-groups">
-            <span class="badge">DIRECT</span>
-            <span class="badge">REJECT</span>
-            <span class="badge">PROXY</span>
-            <span class="badge">AI</span>
-            <span class="badge">Streaming</span>
-            <span class="badge">Final</span>
+          <h3>Routing Rules (first match wins)</h3>
+          <div class="rule-editor">
+            <select id="rule-type" class="premium-select" aria-label="Rule type">
+              <option value="domain">Domain</option>
+              <option value="domain_suffix" selected>Domain suffix</option>
+              <option value="domain_keyword">Domain keyword</option>
+              <option value="domain_regex">Domain regex</option>
+              <option value="ip_cidr">IP CIDR</option>
+              <option value="process_name">Process name</option>
+              <option value="rule_set">Remote rule set</option>
+            </select>
+            <input id="rule-value" class="premium-input" placeholder="example.com or 10.0.0.0/8">
+            <select id="rule-outbound" class="premium-select" aria-label="Rule target">
+              <option value="proxy">Proxy</option>
+              <option value="direct">Direct</option>
+              <option value="reject">Reject</option>
+            </select>
+            <button id="btn-add-rule" class="btn btn-primary">Add Rule</button>
           </div>
+          <div id="rule-list" class="rule-list"></div>
+          <p class="rule-note">Remote rule-set contents are evaluated by sing-box; local preview reports them as deferred.</p>
         </div>
       </section>
 
@@ -137,11 +149,14 @@
         <div class="diagnostic-grid">
           <div class="card glass-panel diag-card">
             <h3>Latency Test</h3>
-            <button class="btn btn-secondary">Run Test</button>
+            <button id="btn-test-latency" class="btn btn-secondary">Test All Nodes</button>
+            <div id="latency-result" class="diagnostic-result"></div>
           </div>
           <div class="card glass-panel diag-card">
             <h3>DNS Resolution Test</h3>
-            <button class="btn btn-secondary">Run Test</button>
+            <input id="dns-test-domain" class="premium-input" value="example.com" aria-label="DNS test domain">
+            <button id="btn-test-dns" class="btn btn-secondary diagnostic-button">Resolve</button>
+            <div id="dns-test-result" class="diagnostic-result"></div>
           </div>
           <div class="card glass-panel diag-card">
             <h3>System Logs</h3>
@@ -153,8 +168,9 @@
           </div>
           <div class="card glass-panel diag-card webrtc-warning">
             <h3>WebRTC Leak Warning</h3>
-            <p>Ensure your browser disables WebRTC to prevent real IP leaks.</p>
-            <button class="btn btn-danger">Check Status</button>
+            <p>Checks ICE candidates through a public STUN endpoint. The test itself reveals your source IP to that endpoint.</p>
+            <button id="btn-test-webrtc" class="btn btn-danger">Check Status</button>
+            <div id="webrtc-result" class="diagnostic-result"></div>
           </div>
         </div>
       </section>
@@ -197,6 +213,7 @@
     </main>
   </div>
   <script src="URIParser.js"></script>
+  <script src="RuleEngine.js"></script>
   <script src="ProfileCompiler.js"></script>
   <script src="renderer.js"></script>
 </body>

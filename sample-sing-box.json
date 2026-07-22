@@ -1,85 +1,79 @@
 {
-  "log": {
-    "level": "info",
-    "timestamp": true
-  },
+  "log": { "level": "info", "timestamp": true },
   "dns": {
     "servers": [
       {
+        "type": "https",
         "tag": "remote",
-        "address": "https://cloudflare-dns.com/dns-query",
+        "server": "cloudflare-dns.com",
+        "server_port": 443,
+        "path": "/dns-query",
+        "tls": { "enabled": true, "server_name": "cloudflare-dns.com" },
+        "domain_resolver": "local",
         "detour": "proxy"
       },
-      {
-        "tag": "local",
-        "address": "223.5.5.5",
-        "detour": "direct"
-      }
+      { "type": "udp", "tag": "local", "server": "223.5.5.5", "server_port": 53, "detour": "direct" },
+      { "type": "fakeip", "tag": "fakeip", "inet4_range": "198.18.0.0/15", "inet6_range": "fc00::/18" }
     ],
     "rules": [
-      {
-        "geosite": "cn",
-        "server": "local"
-      }
+      { "rule_set": ["geosite-cn"], "action": "route", "server": "local" },
+      { "query_type": ["A", "AAAA"], "action": "route", "server": "fakeip" }
     ],
-    "strategy": "ipv4_only"
+    "final": "remote",
+    "strategy": "prefer_ipv4",
+    "reverse_mapping": true
   },
   "inbounds": [
     {
       "type": "tun",
       "tag": "tun-in",
       "interface_name": "tun0",
-      "inet4_address": "172.19.0.1/30",
+      "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
       "auto_route": true,
       "strict_route": true,
-      "stack": "system",
-      "sniff": true,
-      "sniff_override_destination": true
+      "stack": "system"
     }
   ],
   "outbounds": [
     {
-      "type": "vless",
-      "tag": "proxy",
-      "server": "us-west-vless.example.com",
+      "type": "trojan",
+      "tag": "US-Node",
+      "server": "us.example.com",
       "server_port": 443,
-      "uuid": "MASKED_UUID",
-      "tls": {
-        "enabled": true,
-        "server_name": "us-west-vless.example.com",
-        "reality": {
-          "enabled": true,
-          "public_key": "MASKED_PUBLIC_KEY",
-          "short_id": "MASKED_SHORT_ID"
-        }
-      }
+      "password": "MASKED_PASSWORD",
+      "tls": { "enabled": true, "server_name": "us.example.com" },
+      "transport": { "type": "grpc", "service_name": "tunnel" }
     },
-    {
-      "type": "direct",
-      "tag": "direct"
-    },
-    {
-      "type": "block",
-      "tag": "block"
-    }
+    { "type": "selector", "tag": "proxy", "outbounds": ["US-Node"], "default": "US-Node" },
+    { "type": "direct", "tag": "direct" }
   ],
   "route": {
     "rules": [
+      { "action": "sniff" },
+      { "protocol": "dns", "action": "hijack-dns" },
+      { "domain_keyword": ["ads"], "action": "reject" },
+      { "rule_set": ["geosite-cn"], "action": "route", "outbound": "direct" },
+      { "rule_set": ["geoip-cn"], "action": "route", "outbound": "direct" }
+    ],
+    "rule_set": [
       {
-        "geosite": "category-ads-all",
-        "outbound": "block"
+        "type": "remote",
+        "tag": "geosite-cn",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs",
+        "download_detour": "proxy"
       },
       {
-        "geosite": "cn",
-        "geoip": "cn",
-        "outbound": "direct"
-      },
-      {
-        "domain_suffix": [
-          "google.com"
-        ],
-        "outbound": "proxy"
+        "type": "remote",
+        "tag": "geoip-cn",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs",
+        "download_detour": "proxy"
       }
-    ]
-  }
+    ],
+    "final": "proxy",
+    "auto_detect_interface": true,
+    "default_domain_resolver": { "server": "local", "strategy": "ipv4_only" }
+  },
+  "experimental": { "cache_file": { "enabled": true } }
 }

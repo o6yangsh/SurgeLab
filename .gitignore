@@ -1,5 +1,7 @@
 # Dependencies
 node_modules/
+coverage/
+.test-results.json
 
 # Build output
 dist/
@@ -7,6 +9,9 @@ dist/
 # Runtime generated
 sing-box.json
 profiles.json
+rules.json
+system-proxy-backup.json
+*.tmp
 
 # OS files
 .DS_Store

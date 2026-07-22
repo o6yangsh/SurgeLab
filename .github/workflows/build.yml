@@ -15,36 +15,46 @@ jobs:
 
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v4
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
       with:
-        node-version: 18
+        node-version: 22
 
-    - name: Download latest sing-box.exe and geo databases
+    - name: Download and verify sing-box 1.13.14
+      shell: pwsh
       run: |
-        Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-box/releases/download/v1.9.0/sing-box-1.9.0-windows-amd64.zip" -OutFile "sing-box.zip"
+        $version = "1.13.14"
+        $baseUrl = "https://github.com/SagerNet/sing-box/releases/download/v$version"
+        Invoke-WebRequest -Uri "$baseUrl/sing-box-$version-windows-amd64.zip" -OutFile "sing-box.zip"
+        $expected = "f580782c6dd10f7691c66cea1d7c421813c5fbf7e305d1ee7ce0c3a40d196341"
+        $actual = (Get-FileHash "sing-box.zip" -Algorithm SHA256).Hash.ToLower()
+        if (-not $expected -or $actual -ne $expected) { throw "sing-box checksum verification failed" }
         Expand-Archive -Path "sing-box.zip" -DestinationPath "."
-        Move-Item -Path "sing-box-1.9.0-windows-amd64\sing-box.exe" -Destination "sing-box.exe"
-        Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-geosite/releases/latest/download/geosite.db" -OutFile "geosite.db"
-        Invoke-WebRequest -Uri "https://github.com/SagerNet/sing-geoip/releases/latest/download/geoip.db" -OutFile "geoip.db"
+        Move-Item -Path "sing-box-$version-windows-amd64\sing-box.exe" -Destination "sing-box.exe"
       
     - name: Install Dependencies
-      run: npm install
+      run: npm ci
+
+    - name: Audit Dependencies
+      run: npm audit --audit-level=high
+
+    - name: Run Tests and Generate Report
+      run: npm run test:report
 
     - name: Build Windows EXE
       run: npm run build:win
 
     - name: Upload EXE Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: SurgeLab-Windows-Build
         path: dist/*.exe
 
     - name: Create GitHub Release
       if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         files: dist/*.exe
       env:

@@ -1,214 +1,280 @@
 class URIParser {
-    /**
-     * Parses a standard proxy URI into a structured object.
-     * @param {string} uri - The proxy URI (e.g. vless://, hy2://, ss://)
-     * @returns {Object} Structured node object
-     */
     static parse(uri) {
-        if (!uri) throw new Error('URI cannot be empty');
-        if (uri.startsWith('vless://')) return this.parseVless(uri);
-        if (uri.startsWith('hy2://') || uri.startsWith('hysteria2://')) return this.parseHy2(uri);
-        if (uri.startsWith('trojan://')) return this.parseTrojan(uri);
-        if (uri.startsWith('ss://')) return this.parseSS(uri);
-        if (uri.startsWith('vmess://')) return this.parseVmess(uri);
-        throw new Error(`Unsupported URI scheme: ${uri.split('://')[0]}`);
+        const value = String(uri || '').trim();
+        if (!value) throw new Error('URI cannot be empty');
+        if (value.startsWith('vless://')) return this.parseVless(value);
+        if (value.startsWith('hy2://') || value.startsWith('hysteria2://')) return this.parseHy2(value);
+        if (value.startsWith('trojan://')) return this.parseTrojan(value);
+        if (value.startsWith('ss://')) return this.parseSS(value);
+        if (value.startsWith('vmess://')) return this.parseVmess(value);
+        throw new Error(`Unsupported URI scheme: ${value.split('://')[0]}`);
     }
 
-    /**
-     * Cross-environment base64 decode (works in both browser and Node.js/Jest).
-     * @param {string} str - Base64 encoded string
-     * @returns {string} Decoded string
-     */
+    static parseMany(text) {
+        return String(text || '')
+            .split(/\r?\n/)
+            .map(line => line.trim())
+            .filter(line => line && !line.startsWith('#'))
+            .map(line => this.parse(line));
+    }
+
+    static _decode(value) {
+        try { return decodeURIComponent(value || ''); } catch (_) { return value || ''; }
+    }
+
     static _base64Decode(str) {
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(str, 'base64').toString('utf8');
-        }
-        return atob(str);
+        const normalized = String(str || '').replace(/-/g, '+').replace(/_/g, '/');
+        const padded = normalized + '='.repeat((4 - normalized.length % 4) % 4);
+        if (typeof Buffer !== 'undefined') return Buffer.from(padded, 'base64').toString('utf8');
+        return decodeURIComponent(Array.from(atob(padded), c => `%${c.charCodeAt(0).toString(16).padStart(2, '0')}`).join(''));
     }
 
-    /**
-     * Validate port number is in the valid range 1-65535.
-     * @param {number} port - Port number to validate
-     * @returns {number} Validated port
-     */
     static _validatePort(port) {
-        const p = parseInt(port, 10);
-        if (isNaN(p) || p < 1 || p > 65535) {
-            throw new Error(`Invalid port number: ${port}. Must be 1-65535.`);
-        }
-        return p;
+        const raw = String(port ?? '');
+        if (!/^\d{1,5}$/.test(raw)) throw new Error(`Invalid port number: ${port}. Must be 1-65535.`);
+        const parsed = Number(raw);
+        if (parsed < 1 || parsed > 65535) throw new Error(`Invalid port number: ${port}. Must be 1-65535.`);
+        return parsed;
     }
 
-    /**
-     * Extract server and port from a host:port string, supporting IPv6.
-     * @param {string} hostPort - e.g. "1.2.3.4:443" or "[::1]:443"
-     * @returns {{ server: string, port: number }}
-     */
     static _parseHostPort(hostPort) {
-        let server, port;
-        if (hostPort.startsWith('[')) {
-            // IPv6: [::1]:443
-            const closeBracket = hostPort.indexOf(']');
-            if (closeBracket === -1) throw new Error(`Invalid IPv6 address: ${hostPort}`);
-            server = hostPort.slice(1, closeBracket);
-            port = hostPort.slice(closeBracket + 2); // skip ']:'
+        const value = String(hostPort || '');
+        let server;
+        let port;
+        if (value.startsWith('[')) {
+            const close = value.indexOf(']');
+            if (close < 0 || value[close + 1] !== ':') throw new Error(`Invalid IPv6 address: ${value}`);
+            server = value.slice(1, close);
+            port = value.slice(close + 2);
         } else {
-            const lastColon = hostPort.lastIndexOf(':');
-            server = hostPort.slice(0, lastColon);
-            port = hostPort.slice(lastColon + 1);
+            const colon = value.lastIndexOf(':');
+            if (colon <= 0) throw new Error(`Missing server or port: ${value}`);
+            server = value.slice(0, colon);
+            port = value.slice(colon + 1);
         }
+        if (!server) throw new Error('Server cannot be empty');
         return { server, port: this._validatePort(port) };
     }
 
+    static _boolean(value) {
+        return /^(1|true|yes)$/i.test(String(value || ''));
+    }
+
+    static _list(value) {
+        return String(value || '').split(',').map(item => item.trim()).filter(Boolean);
+    }
+
+    static _buildTls(params, server, defaultEnabled = false) {
+        const security = params.get('security') || params.get('tls');
+        const realityEnabled = security === 'reality';
+        const enabled = defaultEnabled || realityEnabled || /^(tls|1|true)$/i.test(security || '');
+        if (!enabled) return undefined;
+
+        const tls = {
+            enabled: true,
+            server_name: params.get('sni') || server
+        };
+        const alpn = this._list(params.get('alpn'));
+        if (alpn.length) tls.alpn = alpn;
+        if (this._boolean(params.get('allowInsecure') || params.get('insecure') || params.get('skip-cert-verify'))) {
+            tls.insecure = true;
+        }
+        const fingerprint = params.get('fp');
+        if (fingerprint) tls.utls = { enabled: true, fingerprint };
+        if (realityEnabled) {
+            if (!tls.utls) tls.utls = { enabled: true, fingerprint: 'chrome' };
+            tls.reality = {
+                enabled: true,
+                public_key: params.get('pbk') || '',
+                short_id: params.get('sid') || ''
+            };
+        }
+        return tls;
+    }
+
+    static _buildTransport(params) {
+        const type = (params.get('type') || params.get('network') || '').toLowerCase();
+        if (!type || type === 'tcp' || type === 'none') return undefined;
+        if (type === 'ws') {
+            const transport = { type: 'ws', path: params.get('path') || '/' };
+            const host = params.get('host');
+            if (host) transport.headers = { Host: host };
+            const earlyData = Number(params.get('ed'));
+            if (Number.isFinite(earlyData) && earlyData > 0) transport.max_early_data = earlyData;
+            if (params.get('eh')) transport.early_data_header_name = params.get('eh');
+            return transport;
+        }
+        if (type === 'grpc') {
+            return { type: 'grpc', service_name: params.get('serviceName') || params.get('service_name') || '' };
+        }
+        if (type === 'httpupgrade') {
+            const transport = { type: 'httpupgrade', path: params.get('path') || '/' };
+            if (params.get('host')) transport.host = params.get('host');
+            return transport;
+        }
+        if (type === 'http' || type === 'h2') {
+            const transport = { type: 'http', path: params.get('path') || '/' };
+            const hosts = this._list(params.get('host'));
+            if (hosts.length) transport.host = hosts;
+            return transport;
+        }
+        if (type === 'quic') return { type: 'quic' };
+        throw new Error(`Unsupported transport type: ${type}`);
+    }
+
     static parseVless(uri) {
-        // Format: vless://uuid@server:port?security=reality&sni=xxx&pbk=xxx&sid=xxx#name
         try {
             const url = new URL(uri);
-            const isReality = url.searchParams.get('security') === 'reality';
-            const port = this._validatePort(url.port || '443');
-            
-            return {
+            if (!url.hostname || !url.username) throw new Error('UUID and server are required');
+            const node = {
                 type: 'vless',
-                name: decodeURIComponent(url.hash.slice(1)) || 'VLESS Node',
+                name: this._decode(url.hash.slice(1)) || 'VLESS Node',
                 server: url.hostname,
-                port: port,
-                uuid: url.username,
-                tls: {
-                    enabled: url.searchParams.get('security') === 'tls' || isReality,
-                    server_name: url.searchParams.get('sni') || url.hostname,
-                    reality: isReality ? {
-                        enabled: true,
-                        public_key: url.searchParams.get('pbk'),
-                        short_id: url.searchParams.get('sid')
-                    } : undefined
-                }
+                port: this._validatePort(url.port || '443'),
+                uuid: this._decode(url.username)
             };
-        } catch (e) {
-            throw new Error(`Failed to parse VLESS URI: ${e.message}`);
+            const flow = url.searchParams.get('flow');
+            if (flow) node.flow = flow;
+            const packetEncoding = url.searchParams.get('packetEncoding') || url.searchParams.get('packet_encoding');
+            if (packetEncoding) node.packet_encoding = packetEncoding;
+            const tls = this._buildTls(url.searchParams, url.hostname);
+            const transport = this._buildTransport(url.searchParams);
+            if (tls) node.tls = tls;
+            if (transport) node.transport = transport;
+            return node;
+        } catch (error) {
+            throw new Error(`Failed to parse VLESS URI: ${error.message}`);
         }
     }
 
     static parseHy2(uri) {
-        // Format: hy2://password@server:port?sni=xxx#name
         try {
-            // hysteria2:// is also valid, ensure we parse cleanly
-            const normalized = uri.replace(/^hysteria2:\/\//, 'hy2://');
-            const url = new URL(normalized);
-            const port = this._validatePort(url.port || '443');
-            return {
+            const url = new URL(uri.replace(/^hysteria2:\/\//, 'hy2://'));
+            if (!url.hostname || !url.username) throw new Error('Password and server are required');
+            const node = {
                 type: 'hysteria2',
-                name: decodeURIComponent(url.hash.slice(1)) || 'Hysteria2 Node',
+                name: this._decode(url.hash.slice(1)) || 'Hysteria2 Node',
                 server: url.hostname,
-                port: port,
-                password: url.username,
-                sni: url.searchParams.get('sni') || url.hostname
+                port: this._validatePort(url.port || '443'),
+                password: this._decode(url.password || url.username),
+                tls: this._buildTls(url.searchParams, url.hostname, true)
             };
-        } catch (e) {
-            throw new Error(`Failed to parse Hysteria2 URI: ${e.message}`);
+            const up = Number(url.searchParams.get('upmbps') || url.searchParams.get('up'));
+            const down = Number(url.searchParams.get('downmbps') || url.searchParams.get('down'));
+            if (Number.isFinite(up) && up > 0) node.up_mbps = up;
+            if (Number.isFinite(down) && down > 0) node.down_mbps = down;
+            const obfsType = url.searchParams.get('obfs');
+            const obfsPassword = url.searchParams.get('obfs-password') || url.searchParams.get('obfs_password');
+            if (obfsType && obfsPassword) node.obfs = { type: obfsType, password: obfsPassword };
+            const ports = url.searchParams.get('mport');
+            if (ports) node.server_ports = ports.split(',').map(value => value.trim()).filter(Boolean);
+            const hopInterval = url.searchParams.get('hop-interval');
+            if (hopInterval) node.hop_interval = hopInterval;
+            return node;
+        } catch (error) {
+            throw new Error(`Failed to parse Hysteria2 URI: ${error.message}`);
         }
     }
 
     static parseTrojan(uri) {
-        // Format: trojan://password@server:port?sni=xxx#name
         try {
             const url = new URL(uri);
-            const port = this._validatePort(url.port || '443');
-            return {
+            if (!url.hostname || !url.username) throw new Error('Password and server are required');
+            const node = {
                 type: 'trojan',
-                name: decodeURIComponent(url.hash.slice(1)) || 'Trojan Node',
+                name: this._decode(url.hash.slice(1)) || 'Trojan Node',
                 server: url.hostname,
-                port: port,
-                password: url.username,
-                tls: {
-                    enabled: true,
-                    server_name: url.searchParams.get('sni') || url.hostname
-                }
+                port: this._validatePort(url.port || '443'),
+                password: this._decode(url.username),
+                tls: this._buildTls(url.searchParams, url.hostname, true)
             };
-        } catch (e) {
-            throw new Error(`Failed to parse Trojan URI: ${e.message}`);
+            const transport = this._buildTransport(url.searchParams);
+            if (transport) node.transport = transport;
+            return node;
+        } catch (error) {
+            throw new Error(`Failed to parse Trojan URI: ${error.message}`);
         }
     }
 
+    static _parsePlugin(value) {
+        if (!value) return {};
+        const parts = value.split(';').filter(Boolean);
+        return { plugin: parts.shift(), plugin_opts: parts.join(';') };
+    }
+
     static parseSS(uri) {
-        // Shadowsocks SIP002 format: ss://base64(method:password)@server:port#name
         try {
-            // Extract the part after ss:// and before the hash
-            const withoutScheme = uri.slice(5); // remove 'ss://'
-            const hashIndex = withoutScheme.lastIndexOf('#');
-            const name = hashIndex !== -1 ? decodeURIComponent(withoutScheme.slice(hashIndex + 1)) : 'Shadowsocks Node';
-            const mainPart = hashIndex !== -1 ? withoutScheme.slice(0, hashIndex) : withoutScheme;
-
-            let method = '', password = '', server = '', port = 8388;
-            const atIndex = mainPart.lastIndexOf('@');
-
-            if (atIndex !== -1) {
-                // SIP002: base64(method:password)@server:port
-                const userinfo = mainPart.slice(0, atIndex);
-                const hostPort = mainPart.slice(atIndex + 1);
-                const decoded = this._base64Decode(userinfo);
-                const colonIdx = decoded.indexOf(':');
-                method = decoded.slice(0, colonIdx);
-                password = decoded.slice(colonIdx + 1);
-                // Use _parseHostPort for proper IPv6 support
-                const hp = this._parseHostPort(hostPort);
-                server = hp.server;
-                port = hp.port;
+            const body = uri.slice(5);
+            const hashIndex = body.indexOf('#');
+            const beforeHash = hashIndex >= 0 ? body.slice(0, hashIndex) : body;
+            const fragment = hashIndex >= 0 ? body.slice(hashIndex + 1) : '';
+            const queryIndex = beforeHash.indexOf('?');
+            const main = queryIndex >= 0 ? beforeHash.slice(0, queryIndex) : beforeHash;
+            const params = new URLSearchParams(queryIndex >= 0 ? beforeHash.slice(queryIndex + 1) : '');
+            let methodPassword;
+            let hostPort;
+            const at = main.lastIndexOf('@');
+            if (at >= 0) {
+                const userInfo = main.slice(0, at);
+                hostPort = main.slice(at + 1);
+                const decodedUserInfo = this._decode(userInfo);
+                methodPassword = decodedUserInfo.includes(':') ? decodedUserInfo : this._base64Decode(userInfo);
             } else {
-                // Legacy: entire payload is base64 encoded
-                const decoded = this._base64Decode(mainPart);
-                // Use a more robust regex that handles passwords with special chars
-                // Format: method:password@server:port
-                // Strategy: find last '@', then parse server:port from the right
-                const lastAt = decoded.lastIndexOf('@');
-                if (lastAt !== -1) {
-                    const methodPassword = decoded.slice(0, lastAt);
-                    const serverPort = decoded.slice(lastAt + 1);
-                    const colonIdx = methodPassword.indexOf(':');
-                    method = methodPassword.slice(0, colonIdx);
-                    password = methodPassword.slice(colonIdx + 1);
-                    const hp = this._parseHostPort(serverPort);
-                    server = hp.server;
-                    port = hp.port;
-                }
+                const decoded = this._base64Decode(main);
+                const decodedAt = decoded.lastIndexOf('@');
+                if (decodedAt < 0) throw new Error('Missing server');
+                methodPassword = decoded.slice(0, decodedAt);
+                hostPort = decoded.slice(decodedAt + 1);
             }
-            
+            const colon = methodPassword.indexOf(':');
+            if (colon <= 0) throw new Error('Missing encryption method or password');
+            const hp = this._parseHostPort(hostPort);
             return {
                 type: 'shadowsocks',
-                name: name,
-                server: server,
-                port: port || 8388,
-                method: method || 'aes-256-gcm',
-                password: password
+                name: this._decode(fragment) || 'Shadowsocks Node',
+                server: hp.server,
+                port: hp.port,
+                method: methodPassword.slice(0, colon),
+                password: this._decode(methodPassword.slice(colon + 1)),
+                ...this._parsePlugin(params.get('plugin'))
             };
-        } catch (e) {
-            throw new Error(`Failed to parse SS URI: ${e.message}`);
+        } catch (error) {
+            throw new Error(`Failed to parse SS URI: ${error.message}`);
         }
     }
 
     static parseVmess(uri) {
-        // vmess:// uses base64 encoded JSON
         try {
-            const encoded = uri.slice(8); // remove 'vmess://'
-            const json = JSON.parse(this._base64Decode(encoded));
-            return {
+            const json = JSON.parse(this._base64Decode(uri.slice(8)));
+            if (!json.add || !json.id) throw new Error('UUID and server are required');
+            const node = {
                 type: 'vmess',
                 name: json.ps || 'VMess Node',
                 server: json.add,
                 port: this._validatePort(json.port),
                 uuid: json.id,
-                alterId: parseInt(json.aid || '0', 10),
-                security: json.scy || 'auto',
-                tls: {
-                    enabled: json.tls === 'tls',
-                    server_name: json.sni || json.host || json.add
-                }
+                alterId: Number(json.aid || 0),
+                security: json.scy || 'auto'
             };
-        } catch (e) {
-            throw new Error(`Failed to parse VMess URI: ${e.message}`);
+            const params = new URLSearchParams();
+            const mappings = {
+                type: json.net, host: json.host, path: json.path, serviceName: json.serviceName,
+                security: json.tls, sni: json.sni, alpn: json.alpn, fp: json.fp,
+                allowInsecure: json.allowInsecure
+            };
+            Object.entries(mappings).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+            });
+            const tls = this._buildTls(params, json.add);
+            const transport = this._buildTransport(params);
+            if (tls) node.tls = tls;
+            if (transport) node.transport = transport;
+            if (json.packetEncoding) node.packet_encoding = json.packetEncoding;
+            return node;
+        } catch (error) {
+            throw new Error(`Failed to parse VMess URI: ${error.message}`);
         }
     }
 }
 
-if (typeof module !== 'undefined') {
-    module.exports = URIParser;
-}
+if (typeof module !== 'undefined') module.exports = URIParser;

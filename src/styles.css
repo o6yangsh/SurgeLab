@@ -209,6 +209,8 @@ body {
   width: 100%;
 }
 
+.uri-input { resize: vertical; min-height: 44px; }
+
 .log-console {
   background: #000;
   border-radius: 8px;
@@ -259,6 +261,36 @@ body {
 
 .rule-groups { display: flex; gap: 8px; flex-wrap: wrap; }
 
+.rule-editor {
+  display: grid;
+  grid-template-columns: 180px minmax(220px, 1fr) 130px auto;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.rule-list { display: flex; flex-direction: column; gap: 8px; }
+
+.rule-item {
+  display: grid;
+  grid-template-columns: 150px minmax(180px, 1fr) 90px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+}
+
+.rule-item code { overflow-wrap: anywhere; color: var(--text-main); }
+.rule-actions { display: flex; gap: 5px; justify-content: flex-end; }
+.rule-actions .btn { padding: 5px 9px; }
+.rule-note { color: var(--text-muted); font-size: 12px; margin-top: 12px; }
+
+@media (max-width: 900px) {
+  .rule-editor, .rule-item { grid-template-columns: 1fr; }
+}
+
 .form-group { display: flex; flex-direction: column; gap: 12px; }
 
 .checkbox-label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
@@ -274,6 +306,8 @@ body {
   border-color: var(--danger);
   background: rgba(239, 68, 68, 0.1);
 }
+.diagnostic-button { margin-top: 10px; }
+.diagnostic-result { margin-top: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .preview-result { margin-top: 12px; font-weight: bold; }
 
 .node-item .delete-btn {
